@@ -260,8 +260,6 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
                                 Logger.error(error)
                             }
                         }
-                    } else if update.authorizationDenied {
-                        // Process the authorization denied state change.
                     } else {
                         // Process other state changes.
                     }
