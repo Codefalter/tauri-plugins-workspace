@@ -27,8 +27,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
   private var permissionRequests: [Invoke] = []
   private var positionRequests: [Invoke] = []
   private var watcherChannels: [Channel] = []
-  @available(iOS 17.0, *)
-  private var backgroundActivitySession: CLBackgroundActivitySession?
+  private var backgroundActivitySession: Any?
 
 
   override init() {
@@ -227,6 +226,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
     if #available(iOS 17.0, *) {
         if backgroundActivitySession == nil {
           backgroundActivitySession = CLBackgroundActivitySession()
+          Logger.info("Background activity session started")
         }
     }
 
@@ -240,9 +240,11 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
     self.isUpdatingLocation = false
 
     if #available(iOS 17.0, *) {
-        // Beenden Sie die Background-Aktivitätssession
-        backgroundActivitySession?.invalidate()
-        backgroundActivitySession = nil
+        if let session = backgroundActivitySession as? CLBackgroundActivitySession {
+            session.invalidate()
+          }
+          backgroundActivitySession = nil
+          Logger.info("Background activity session stopped")
     }
   }
 
