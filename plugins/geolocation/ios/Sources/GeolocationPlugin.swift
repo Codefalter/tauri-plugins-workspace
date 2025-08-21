@@ -32,6 +32,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
     override init() {
         super.init()
         locationManager.delegate = self
+        self.locationManager.allowsBackgroundLocationUpdates = true;
     }
 
     //
