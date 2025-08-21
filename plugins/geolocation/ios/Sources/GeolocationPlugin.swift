@@ -183,8 +183,8 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
       // and i don't see a reason to use old locations
       if let location = locations.last {
         let result = convertLocation(location)
+        Logger.info(result)
         do {
-          Logger.error(result)
           try channel.send(result)
         } catch {
           Logger.error(error)
