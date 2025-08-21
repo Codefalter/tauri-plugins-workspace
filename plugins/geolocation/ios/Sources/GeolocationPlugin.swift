@@ -231,51 +231,51 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
         // self.locationManager.startUpdatingLocation()
 
         // Take background location permissions before
-        Task {
-            do {
-                // Assign the CLBackgroundActivitySession to global var
-                self.backgroundActivitySession = CLBackgroundActivitySession()
+//        Task {
+//            do {
+//                // Assign the CLBackgroundActivitySession to global var
+//                self.backgroundActivitySession = CLBackgroundActivitySession()
+//
+//                // Obtain an asynchronous stream of updates.
+//                let stream = CLLocationUpdate.liveUpdates()
+//
+//                // Iterate over the stream and handle incoming updates.
+//                for try await update in stream {
+//                    if update.location != nil {
+//                        let location = update.location;
+//                        // Process the location.
+//
+//                        for request in self.positionRequests {
+//                            let result = convertLocation(location!)
+//                            request.resolve(result)
+//                        }
+//
+//                        for channel in self.watcherChannels {
+//                            // The capacitor plugin uses locations.first but .last should be the most recent one
+//                            // and i don't see a reason to use old locations
+//                            let result = convertLocation(location!)
+//                            do {
+//                                try channel.send(result)
+//                            } catch {
+//                                Logger.error(error)
+//                            }
+//                        }
+//                    } else {
+//                        // Process other state changes.
+//                    }
+//                }
+//            } catch {
+//                Logger.error(error)
+//            }
+//        }
 
-                // Obtain an asynchronous stream of updates.
-                let stream = CLLocationUpdate.liveUpdates()
-
-                // Iterate over the stream and handle incoming updates.
-                for try await update in stream {
-                    if update.location != nil {
-                        let location = update.location;
-                        // Process the location.
-
-                        for request in self.positionRequests {
-                            let result = convertLocation(location!)
-                            request.resolve(result)
-                        }
-
-                        for channel in self.watcherChannels {
-                            // The capacitor plugin uses locations.first but .last should be the most recent one
-                            // and i don't see a reason to use old locations
-                            let result = convertLocation(location!)
-                            do {
-                                try channel.send(result)
-                            } catch {
-                                Logger.error(error)
-                            }
-                        }
-                    } else {
-                        // Process other state changes.
-                    }
-                }
-            } catch {
-                Logger.error(error)
-            }
-        }
-
-        //self.locationManager.startUpdatingLocation()
+        self.locationManager.startUpdatingLocation()
         self.isUpdatingLocation = true
     }
 
     // TODO: Why is this pub in capacitor
     private func stopUpdating() {
-        // self.locationManager.stopUpdatingLocation()
+        self.locationManager.stopUpdatingLocation()
         self.isUpdatingLocation = false
 
         if #available(iOS 17.0, *) {
