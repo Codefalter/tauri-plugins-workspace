@@ -229,13 +229,76 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
         }
     }
 
-    self.locationManager.startUpdatingLocation()
+    // self.locationManager.startUpdatingLocation()
+
+    // Take background location permissions before
+    Task {
+        do {
+            // Assign the CLBackgroundActivitySession to global var
+            self.backgroundActivity = CLBackgroundActivitySession()
+
+
+           // Obtain an asynchronous stream of updates.
+           let stream = CLLocationUpdate.liveUpdates()
+
+           // Iterate over the stream and handle incoming updates.
+           for try await update in stream {
+                if update.location != nil {
+                let location = update.location;
+                     // Process the location.
+                     if let location = update {
+                          let result = convertLocation(location)
+                          request.resolve(result)
+                        } else {
+                          request.reject("Location service returned an empty Location array.")
+                        }
+                      }
+
+                      for channel in self.watcherChannels {
+                        // The capacitor plugin uses locations.first but .last should be the most recent one
+                        // and i don't see a reason to use old locations
+                        if let location = update {
+                          let result = convertLocation(location)
+                          do {
+                            try channel.send(result)
+                          } catch {
+                            Logger.error(error)
+                          }
+                        } else {
+                          do {
+                            try channel.send("Location service returned an empty Location array.")
+                          } catch {
+                            Logger.error(error)
+                          }
+                        }
+                } else if update.authorizationDenied {
+                     // Process the authorization denied state change.
+                     do {
+                       try channel.send("Unauthorized to use location service")
+                     } catch {
+                       Logger.error(error)
+                     }
+                } else {
+                     // Process other state changes.
+                     do {
+                       try channel.send("Unknown state")
+                     } catch {
+                       Logger.error(error)
+                     }
+                }
+           }
+        } catch {
+            Logger.error(error)
+        }
+    }
+
+    //self.locationManager.startUpdatingLocation()
     self.isUpdatingLocation = true
   }
 
   // TODO: Why is this pub in capacitor
   private func stopUpdating() {
-    self.locationManager.stopUpdatingLocation()
+    // self.locationManager.stopUpdatingLocation()
     self.isUpdatingLocation = false
 
     if #available(iOS 17.0, *) {
