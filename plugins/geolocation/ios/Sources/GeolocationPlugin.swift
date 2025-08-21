@@ -27,6 +27,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
   private var permissionRequests: [Invoke] = []
   private var positionRequests: [Invoke] = []
   private var watcherChannels: [Channel] = []
+  @available(iOS 17.0, *)
   private var backgroundActivitySession: CLBackgroundActivitySession?
 
 
@@ -223,8 +224,10 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
 
   private func startLocationUpdates() {
     // Starten Sie die Background-Aktivitätssession für kontinuierliche Standortaktualisierungen
-    if backgroundActivitySession == nil {
-      backgroundActivitySession = CLBackgroundActivitySession()
+    if #available(iOS 17.0, *) {
+        if backgroundActivitySession == nil {
+          backgroundActivitySession = CLBackgroundActivitySession()
+        }
     }
 
     self.locationManager.startUpdatingLocation()
@@ -236,9 +239,11 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
     self.locationManager.stopUpdatingLocation()
     self.isUpdatingLocation = false
 
-    // Beenden Sie die Background-Aktivitätssession
-    backgroundActivitySession?.invalidate()
-    backgroundActivitySession = nil
+    if #available(iOS 17.0, *) {
+        // Beenden Sie die Background-Aktivitätssession
+        backgroundActivitySession?.invalidate()
+        backgroundActivitySession = nil
+    }
   }
 
   private func convertLocation(_ location: CLLocation) -> JsonObject {
