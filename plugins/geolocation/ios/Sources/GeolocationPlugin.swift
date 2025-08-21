@@ -51,7 +51,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
 
       // TODO: Use the authorizationStatus instance property with locationManagerDidChangeAuthorization(_:) instead.
       if CLLocationManager.authorizationStatus() == .notDetermined {
-        self.locationManager.requestWhenInUseAuthorization()
+        self.locationManager.requestAlwaysAuthorization()
       } else {
         self.locationManager.requestLocation()
       }
@@ -72,7 +72,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
 
       // TODO: Use the authorizationStatus instance property with locationManagerDidChangeAuthorization(_:) instead.
       if CLLocationManager.authorizationStatus() == .notDetermined {
-        self.locationManager.requestWhenInUseAuthorization()
+        self.locationManager.requestAlwaysAuthorization()
       } else {
         self.locationManager.startUpdatingLocation()
         self.isUpdatingLocation = true
@@ -127,7 +127,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
         self.permissionRequests.append(invoke)
 
         DispatchQueue.main.async {
-          self.locationManager.requestWhenInUseAuthorization()
+          self.locationManager.requestAlwaysAuthorization()
         }
       } else {
         checkPermissions(invoke)
