@@ -27,6 +27,8 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
   private var permissionRequests: [Invoke] = []
   private var positionRequests: [Invoke] = []
   private var watcherChannels: [Channel] = []
+  private var backgroundActivitySession: CLBackgroundActivitySession?
+
 
   override init() {
     super.init()
@@ -74,8 +76,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
       if CLLocationManager.authorizationStatus() == .notDetermined {
         self.locationManager.requestAlwaysAuthorization()
       } else {
-        self.locationManager.startUpdatingLocation()
-        self.isUpdatingLocation = true
+        self.startLocationUpdates();
       }
     }
 
@@ -182,6 +183,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
       if let location = locations.last {
         let result = convertLocation(location)
         do {
+          Logger.error(result)
           try channel.send(result)
         } catch {
           Logger.error(error)
@@ -211,8 +213,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
     }
 
     if !self.watcherChannels.isEmpty && !self.isUpdatingLocation {
-      self.locationManager.startUpdatingLocation()
-      self.isUpdatingLocation = true
+      self.startLocationUpdates()
     }
   }
 
@@ -220,10 +221,24 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
   // Internal/Helper methods
   //
 
+  private func startLocationUpdates() {
+    // Starten Sie die Background-Aktivitätssession für kontinuierliche Standortaktualisierungen
+    if backgroundActivitySession == nil {
+      backgroundActivitySession = CLBackgroundActivitySession()
+    }
+
+    self.locationManager.startUpdatingLocation()
+    self.isUpdatingLocation = true
+  }
+
   // TODO: Why is this pub in capacitor
   private func stopUpdating() {
     self.locationManager.stopUpdatingLocation()
     self.isUpdatingLocation = false
+
+    // Beenden Sie die Background-Aktivitätssession
+    backgroundActivitySession?.invalidate()
+    backgroundActivitySession = nil
   }
 
   private func convertLocation(_ location: CLLocation) -> JsonObject {
