@@ -9,326 +9,322 @@ import UIKit
 import WebKit
 
 class GetPositionArgs: Decodable {
-  var enableHighAccuracy: Bool?
+    var enableHighAccuracy: Bool?
 }
 
 class WatchPositionArgs: Decodable {
-  let options: GetPositionArgs
-  let channel: Channel
+    let options: GetPositionArgs
+    let channel: Channel
 }
 
 class ClearWatchArgs: Decodable {
-  let channelId: UInt32
+    let channelId: UInt32
 }
 
 class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
-  private let locationManager = CLLocationManager()
-  private var isUpdatingLocation: Bool = false
-  private var permissionRequests: [Invoke] = []
-  private var positionRequests: [Invoke] = []
-  private var watcherChannels: [Channel] = []
-  private var backgroundActivitySession: Any?
+    private let locationManager = CLLocationManager()
+    private var isUpdatingLocation: Bool = false
+    private var permissionRequests: [Invoke] = []
+    private var positionRequests: [Invoke] = []
+    private var watcherChannels: [Channel] = []
+    private var backgroundActivitySession: Any?
 
-
-  override init() {
-    super.init()
-    locationManager.delegate = self
-  }
-
-  //
-  // Tauri commands
-  //
-
-  @objc public func getCurrentPosition(_ invoke: Invoke) throws {
-    let args = try invoke.parseArgs(GetPositionArgs.self)
-
-    self.positionRequests.append(invoke)
-
-    DispatchQueue.main.async {
-      if args.enableHighAccuracy == true {
-        self.locationManager.desiredAccuracy = kCLLocationAccuracyBest
-      } else {
-        self.locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
-      }
-
-      // TODO: Use the authorizationStatus instance property with locationManagerDidChangeAuthorization(_:) instead.
-      if CLLocationManager.authorizationStatus() == .notDetermined {
-        self.locationManager.requestAlwaysAuthorization()
-      } else {
-        self.locationManager.requestLocation()
-      }
-    }
-  }
-
-  @objc public func watchPosition(_ invoke: Invoke) throws {
-    let args = try invoke.parseArgs(WatchPositionArgs.self)
-
-    self.watcherChannels.append(args.channel)
-
-    DispatchQueue.main.async {
-      if args.options.enableHighAccuracy == true {
-        self.locationManager.desiredAccuracy = kCLLocationAccuracyBest
-      } else {
-        self.locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
-      }
-
-      // TODO: Use the authorizationStatus instance property with locationManagerDidChangeAuthorization(_:) instead.
-      if CLLocationManager.authorizationStatus() == .notDetermined {
-        self.locationManager.requestAlwaysAuthorization()
-      } else {
-        self.startLocationUpdates();
-      }
+    override init() {
+        super.init()
+        locationManager.delegate = self
     }
 
-    invoke.resolve()
-  }
+    //
+    // Tauri commands
+    //
 
-  @objc public func clearWatch(_ invoke: Invoke) throws {
-    let args = try invoke.parseArgs(ClearWatchArgs.self)
+    @objc public func getCurrentPosition(_ invoke: Invoke) throws {
+        let args = try invoke.parseArgs(GetPositionArgs.self)
 
-    self.watcherChannels = self.watcherChannels.filter { $0.id != args.channelId }
-
-    // TODO: capacitor plugin calls stopUpdating unconditionally
-    if self.watcherChannels.isEmpty {
-      self.stopUpdating()
-    }
-
-    invoke.resolve()
-  }
-
-  @objc override public func checkPermissions(_ invoke: Invoke) {
-    var status: String = ""
-
-    if CLLocationManager.locationServicesEnabled() {
-      // TODO: Use the authorizationStatus instance property with locationManagerDidChangeAuthorization(_:) instead.
-      switch CLLocationManager.authorizationStatus() {
-      case .notDetermined:
-        status = "prompt"
-      case .restricted, .denied:
-        status = "denied"
-      case .authorizedAlways, .authorizedWhenInUse:
-        status = "granted"
-      @unknown default:
-        status = "prompt"
-      }
-    } else {
-      invoke.reject("Location services are not enabled.")
-      return
-    }
-
-    let result = ["location": status, "coarseLocation": status]
-
-    invoke.resolve(result)
-  }
-
-  @objc override public func requestPermissions(_ invoke: Invoke) {
-    if CLLocationManager.locationServicesEnabled() {
-      // TODO: Use the authorizationStatus instance property with locationManagerDidChangeAuthorization(_:) instead.
-      if CLLocationManager.authorizationStatus() == .notDetermined {
-        self.permissionRequests.append(invoke)
+        self.positionRequests.append(invoke)
 
         DispatchQueue.main.async {
-          self.locationManager.requestAlwaysAuthorization()
-        }
-      } else {
-        checkPermissions(invoke)
-      }
-    } else {
-      invoke.reject("Location services are not enabled.")
-    }
-  }
+            if args.enableHighAccuracy == true {
+                self.locationManager.desiredAccuracy = kCLLocationAccuracyBest
+            } else {
+                self.locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
+            }
 
-  //
-  // Delegate methods
-  //
-
-  public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-    Logger.error(error)
-
-    let requests = self.positionRequests + self.permissionRequests
-    self.positionRequests.removeAll()
-    self.permissionRequests.removeAll()
-
-    for request in requests {
-      request.reject(error.localizedDescription)
-    }
-
-    for channel in self.watcherChannels {
-      do {
-        try channel.send(error.localizedDescription)
-      } catch {
-        Logger.error(error)
-      }
-    }
-  }
-
-  public func locationManager(
-    _ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]
-  ) {
-    // Respond to all getCurrentPosition() calls.
-    for request in self.positionRequests {
-      // The capacitor plugin uses locations.first but .last should be the most current one
-      // and i don't see a reason to use old locations
-      if let location = locations.last {
-        let result = convertLocation(location)
-        request.resolve(result)
-      } else {
-        request.reject("Location service returned an empty Location array.")
-      }
-    }
-
-    for channel in self.watcherChannels {
-      // The capacitor plugin uses locations.first but .last should be the most recent one
-      // and i don't see a reason to use old locations
-      if let location = locations.last {
-        let result = convertLocation(location)
-        do {
-          try channel.send(result)
-        } catch {
-          Logger.error(error)
-        }
-      } else {
-        do {
-          try channel.send("Location service returned an empty Location array.")
-        } catch {
-          Logger.error(error)
-        }
-      }
-    }
-  }
-
-  public func locationManager(
-    _ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus
-  ) {
-    let requests = self.permissionRequests
-    self.permissionRequests.removeAll()
-
-    for request in requests {
-      checkPermissions(request)
-    }
-
-    if !self.positionRequests.isEmpty {
-      self.locationManager.requestLocation()
-    }
-
-    if !self.watcherChannels.isEmpty && !self.isUpdatingLocation {
-      self.startLocationUpdates()
-    }
-  }
-
-  //
-  // Internal/Helper methods
-  //
-
-  private func startLocationUpdates() {
-    // Starten Sie die Background-Aktivitätssession für kontinuierliche Standortaktualisierungen
-    if #available(iOS 17.0, *) {
-        if backgroundActivitySession == nil {
-          backgroundActivitySession = CLBackgroundActivitySession()
-          Logger.info("Background activity session started")
+            // TODO: Use the authorizationStatus instance property with locationManagerDidChangeAuthorization(_:) instead.
+            if CLLocationManager.authorizationStatus() == .notDetermined {
+                self.locationManager.requestAlwaysAuthorization()
+            } else {
+                self.locationManager.requestLocation()
+            }
         }
     }
 
-    // self.locationManager.startUpdatingLocation()
+    @objc public func watchPosition(_ invoke: Invoke) throws {
+        let args = try invoke.parseArgs(WatchPositionArgs.self)
 
-    // Take background location permissions before
-    Task {
-        do {
-            // Assign the CLBackgroundActivitySession to global var
-            self.backgroundActivity = CLBackgroundActivitySession()
+        self.watcherChannels.append(args.channel)
 
+        DispatchQueue.main.async {
+            if args.options.enableHighAccuracy == true {
+                self.locationManager.desiredAccuracy = kCLLocationAccuracyBest
+            } else {
+                self.locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
+            }
 
-           // Obtain an asynchronous stream of updates.
-           let stream = CLLocationUpdate.liveUpdates()
+            // TODO: Use the authorizationStatus instance property with locationManagerDidChangeAuthorization(_:) instead.
+            if CLLocationManager.authorizationStatus() == .notDetermined {
+                self.locationManager.requestAlwaysAuthorization()
+            } else {
+                self.startLocationUpdates();
+            }
+        }
 
-           // Iterate over the stream and handle incoming updates.
-           for try await update in stream {
-                if update.location != nil {
-                let location = update.location;
-                     // Process the location.
-                     if let location = update {
-                          let result = convertLocation(location)
-                          request.resolve(result)
-                        } else {
-                          request.reject("Location service returned an empty Location array.")
-                        }
-                      }
+        invoke.resolve()
+    }
 
-                      for channel in self.watcherChannels {
-                        // The capacitor plugin uses locations.first but .last should be the most recent one
-                        // and i don't see a reason to use old locations
-                        if let location = update {
-                          let result = convertLocation(location)
-                          do {
-                            try channel.send(result)
-                          } catch {
-                            Logger.error(error)
-                          }
-                        } else {
-                          do {
-                            try channel.send("Location service returned an empty Location array.")
-                          } catch {
-                            Logger.error(error)
-                          }
-                        }
-                } else if update.authorizationDenied {
-                     // Process the authorization denied state change.
-                     do {
-                       try channel.send("Unauthorized to use location service")
-                     } catch {
-                       Logger.error(error)
-                     }
-                } else {
-                     // Process other state changes.
-                     do {
-                       try channel.send("Unknown state")
-                     } catch {
-                       Logger.error(error)
-                     }
+    @objc public func clearWatch(_ invoke: Invoke) throws {
+        let args = try invoke.parseArgs(ClearWatchArgs.self)
+
+        self.watcherChannels = self.watcherChannels.filter { $0.id != args.channelId }
+
+        // TODO: capacitor plugin calls stopUpdating unconditionally
+        if self.watcherChannels.isEmpty {
+            self.stopUpdating()
+        }
+
+        invoke.resolve()
+    }
+
+    @objc override public func checkPermissions(_ invoke: Invoke) {
+        var status: String = ""
+
+        if CLLocationManager.locationServicesEnabled() {
+            // TODO: Use the authorizationStatus instance property with locationManagerDidChangeAuthorization(_:) instead.
+            switch CLLocationManager.authorizationStatus() {
+            case .notDetermined:
+                status = "prompt"
+            case .restricted, .denied:
+                status = "denied"
+            case .authorizedAlways, .authorizedWhenInUse:
+                status = "granted"
+            @unknown default:
+                status = "prompt"
+            }
+        } else {
+            invoke.reject("Location services are not enabled.")
+            return
+        }
+
+        let result = ["location": status, "coarseLocation": status]
+
+        invoke.resolve(result)
+    }
+
+    @objc override public func requestPermissions(_ invoke: Invoke) {
+        if CLLocationManager.locationServicesEnabled() {
+            // TODO: Use the authorizationStatus instance property with locationManagerDidChangeAuthorization(_:) instead.
+            if CLLocationManager.authorizationStatus() == .notDetermined {
+                self.permissionRequests.append(invoke)
+
+                DispatchQueue.main.async {
+                    self.locationManager.requestAlwaysAuthorization()
                 }
-           }
-        } catch {
-            Logger.error(error)
+            } else {
+                checkPermissions(invoke)
+            }
+        } else {
+            invoke.reject("Location services are not enabled.")
         }
     }
 
-    //self.locationManager.startUpdatingLocation()
-    self.isUpdatingLocation = true
-  }
+    //
+    // Delegate methods
+    //
 
-  // TODO: Why is this pub in capacitor
-  private func stopUpdating() {
-    // self.locationManager.stopUpdatingLocation()
-    self.isUpdatingLocation = false
+    public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Logger.error(error)
 
-    if #available(iOS 17.0, *) {
-        if let session = backgroundActivitySession as? CLBackgroundActivitySession {
-            session.invalidate()
-          }
-          backgroundActivitySession = nil
-          Logger.info("Background activity session stopped")
+        let requests = self.positionRequests + self.permissionRequests
+        self.positionRequests.removeAll()
+        self.permissionRequests.removeAll()
+
+        for request in requests {
+            request.reject(error.localizedDescription)
+        }
+
+        for channel in self.watcherChannels {
+            do {
+                try channel.send(error.localizedDescription)
+            } catch {
+                Logger.error(error)
+            }
+        }
     }
-  }
 
-  private func convertLocation(_ location: CLLocation) -> JsonObject {
-    var ret: JsonObject = [:]
-    var coords: JsonObject = [:]
+    public func locationManager(
+        _ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]
+    ) {
+        // Respond to all getCurrentPosition() calls.
+        for request in self.positionRequests {
+            // The capacitor plugin uses locations.first but .last should be the most current one
+            // and i don't see a reason to use old locations
+            if let location = locations.last {
+                let result = convertLocation(location)
+                request.resolve(result)
+            } else {
+                request.reject("Location service returned an empty Location array.")
+            }
+        }
 
-    coords["latitude"] = location.coordinate.latitude
-    coords["longitude"] = location.coordinate.longitude
-    coords["accuracy"] = location.horizontalAccuracy
-    coords["altitude"] = location.altitude
-    coords["altitudeAccuracy"] = location.verticalAccuracy
-    coords["speed"] = location.speed
-    coords["heading"] = location.course
-    ret["timestamp"] = Int((location.timestamp.timeIntervalSince1970 * 1000))
-    ret["coords"] = coords
+        for channel in self.watcherChannels {
+            // The capacitor plugin uses locations.first but .last should be the most recent one
+            // and i don't see a reason to use old locations
+            if let location = locations.last {
+                let result = convertLocation(location)
+                do {
+                    try channel.send(result)
+                } catch {
+                    Logger.error(error)
+                }
+            } else {
+                do {
+                    try channel.send("Location service returned an empty Location array.")
+                } catch {
+                    Logger.error(error)
+                }
+            }
+        }
+    }
 
-    return ret
-  }
+    public func locationManager(
+        _ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus
+    ) {
+        let requests = self.permissionRequests
+        self.permissionRequests.removeAll()
+
+        for request in requests {
+            checkPermissions(request)
+        }
+
+        if !self.positionRequests.isEmpty {
+            self.locationManager.requestLocation()
+        }
+
+        if !self.watcherChannels.isEmpty && !self.isUpdatingLocation {
+            self.startLocationUpdates()
+        }
+    }
+
+    //
+    // Internal/Helper methods
+    //
+
+    private func startLocationUpdates() {
+        // Starten Sie die Background-Aktivitätssession für kontinuierliche Standortaktualisierungen
+        if #available(iOS 17.0, *) {
+            if backgroundActivitySession == nil {
+                backgroundActivitySession = CLBackgroundActivitySession()
+                Logger.info("Background activity session started")
+            }
+        }
+
+        // self.locationManager.startUpdatingLocation()
+
+        // Take background location permissions before
+        Task {
+            do {
+                // Assign the CLBackgroundActivitySession to global var
+                self.backgroundActivitySession = CLBackgroundActivitySession()
+
+                // Obtain an asynchronous stream of updates.
+                let stream = CLLocationUpdate.liveUpdates()
+
+                // Iterate over the stream and handle incoming updates.
+                for try await update in stream {
+                    if update.location != nil {
+                        let location = update.location;
+                        // Process the location.
+
+                        let result = convertLocation(location)
+                        request.resolve(result)
+
+                        for channel in self.watcherChannels {
+                            // The capacitor plugin uses locations.first but .last should be the most recent one
+                            // and i don't see a reason to use old locations
+                            if let location = update {
+                                let result = convertLocation(location)
+                                do {
+                                    try channel.send(result)
+                                } catch {
+                                    Logger.error(error)
+                                }
+                            } else {
+                                do {
+                                    try channel.send(
+                                        "Location service returned an empty Location array.")
+                                } catch {
+                                    Logger.error(error)
+                                }
+                            }
+                        }
+                    } else if update.authorizationDenied {
+                        // Process the authorization denied state change.
+                        do {
+                            try channel.send("Unauthorized to use location service")
+                        } catch {
+                            Logger.error(error)
+                        }
+                    } else {
+                        // Process other state changes.
+                        do {
+                            try channel.send("Unknown state")
+                        } catch {
+                            Logger.error(error)
+                        }
+                    }
+                }
+            } catch {
+                Logger.error(error)
+            }
+        }
+
+        //self.locationManager.startUpdatingLocation()
+        self.isUpdatingLocation = true
+    }
+
+    // TODO: Why is this pub in capacitor
+    private func stopUpdating() {
+        // self.locationManager.stopUpdatingLocation()
+        self.isUpdatingLocation = false
+
+        if #available(iOS 17.0, *) {
+            if let session = backgroundActivitySession as? CLBackgroundActivitySession {
+                session.invalidate()
+            }
+            backgroundActivitySession = nil
+            Logger.info("Background activity session stopped")
+        }
+    }
+
+    private func convertLocation(_ location: CLLocation) -> JsonObject {
+        var ret: JsonObject = [:]
+        var coords: JsonObject = [:]
+
+        coords["latitude"] = location.coordinate.latitude
+        coords["longitude"] = location.coordinate.longitude
+        coords["accuracy"] = location.horizontalAccuracy
+        coords["altitude"] = location.altitude
+        coords["altitudeAccuracy"] = location.verticalAccuracy
+        coords["speed"] = location.speed
+        coords["heading"] = location.course
+        ret["timestamp"] = Int((location.timestamp.timeIntervalSince1970 * 1000))
+        ret["coords"] = coords
+
+        return ret
+    }
 }
 
 @_cdecl("init_plugin_geolocation")
 func initPlugin() -> Plugin {
-  return GeolocationPlugin()
+    return GeolocationPlugin()
 }
