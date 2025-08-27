@@ -180,8 +180,8 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
 
         if let location = locations.last {
             let result = convertLocation(location)
-            let messageObj = URLSessionWebSocketTask.Message.data(convertGeoUpdateMessage(result))
-            webSocketTask.send(messageObj) { error in
+            let messageObj = URLSessionWebSocketTask.Message.string(stringify(convertGeoUpdateMessage(result)))
+            webSocketTask?.send(messageObj) { error in
                 if let error = error {
                     print("Error sending a message: \(error)")
                 }
@@ -241,6 +241,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
         }
         let url = URL(string: "wss://hide-and-seek.pappmasch.ee/ws")!
         self.webSocketTask = URLSession.shared.webSocketTask(with: url)
+        self.webSocketTask?.resume()
 
         // self.locationManager.startUpdatingLocation()
 
@@ -331,4 +332,22 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
 @_cdecl("init_plugin_geolocation")
 func initPlugin() -> Plugin {
     return GeolocationPlugin()
+}
+
+func stringify(json: Any, prettyPrinted: Bool = false) -> String {
+    var options: JSONSerialization.WritingOptions = []
+    if prettyPrinted {
+      options = JSONSerialization.WritingOptions.prettyPrinted
+    }
+
+    do {
+      let data = try JSONSerialization.data(withJSONObject: json, options: options)
+      if let string = String(data: data, encoding: String.Encoding.utf8) {
+        return string
+      }
+    } catch {
+      print(error)
+    }
+
+    return ""
 }
