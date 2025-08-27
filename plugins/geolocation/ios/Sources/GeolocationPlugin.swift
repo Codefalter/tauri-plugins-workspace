@@ -28,6 +28,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
     private var positionRequests: [Invoke] = []
     private var watcherChannels: [Channel] = []
     private var backgroundActivitySession: Any?
+    private var webSocketTask: URLSessionWebSocketTask?
 
     override init() {
         super.init()
@@ -177,6 +178,16 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
             }
         }
 
+        if let location = locations.last {
+            let result = convertLocation(location)
+            let messageObj = URLSessionWebSocketTask.Message.data(convertGeoUpdateMessage(result))
+            webSocketTask.send(messageObj) { error in
+                if let error = error {
+                    print("Error sending a message: \(error)")
+                }
+            }
+        }
+
         for channel in self.watcherChannels {
             // The capacitor plugin uses locations.first but .last should be the most recent one
             // and i don't see a reason to use old locations
@@ -228,6 +239,8 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
                 Logger.info("Background activity session started")
             }
         }
+        let url = URL(string: "wss://hide-and-seek.pappmasch.ee/ws")!
+        self.webSocketTask = URLSession.shared.webSocketTask(with: url)
 
         // self.locationManager.startUpdatingLocation()
 
@@ -278,6 +291,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
     private func stopUpdating() {
         self.locationManager.stopUpdatingLocation()
         self.isUpdatingLocation = false
+        self.webSocketTask = nil;
 
         if #available(iOS 17.0, *) {
             if let session = backgroundActivitySession as? CLBackgroundActivitySession {
@@ -304,6 +318,14 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
 
         return ret
     }
+
+    private func convertGeoUpdateMessage(_ obj: JsonObject) -> JsonObject {
+            var ret: JsonObject = [:]
+            ret["type"] = "geo:update"
+            ret["data"] = obj
+
+            return ret
+        }
 }
 
 @_cdecl("init_plugin_geolocation")
