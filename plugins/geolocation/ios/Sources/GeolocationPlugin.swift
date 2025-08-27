@@ -180,7 +180,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
 
         if let location = locations.last {
             let result = convertLocation(location)
-            let messageObj = URLSessionWebSocketTask.Message.string(stringify(convertGeoUpdateMessage(result)))
+            let messageObj = URLSessionWebSocketTask.Message.string(stringify(json: convertGeoUpdateMessage(result)))
             webSocketTask?.send(messageObj) { error in
                 if let error = error {
                     print("Error sending a message: \(error)")
