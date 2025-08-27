@@ -324,7 +324,7 @@ class GeolocationPlugin: Plugin, CLLocationManagerDelegate {
 
     private func convertGeoUpdateMessage(_ obj: JsonObject) -> JsonObject {
             var ret: JsonObject = [:]
-            ret["type"] = "geo:update"
+            ret["event"] = "geo:update"
             ret["data"] = obj
 
             return ret
